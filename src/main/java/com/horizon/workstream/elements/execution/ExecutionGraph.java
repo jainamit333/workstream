@@ -3,9 +3,11 @@ package com.horizon.workstream.elements.execution;
 import com.google.common.base.Verify;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Objects;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Consumer;
+import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
 
 /**
@@ -42,72 +44,140 @@ public class ExecutionGraph {
     return Collections.unmodifiableSet(endNodes);
   }
 
-  public static class ExecutionBuilder {
+  public void printExecution() {
+  }
+
+  public static class ExecutionGraphBuilder {
 
     private final String name;
     private final ExecutionNode root;
-    private final Set<ExecutionNode> endNodes;
-    private ExecutionNode currentNode;
+    private final Map<String, ExecutionNode> endNodes;
 
-    public ExecutionBuilder(final String name, final ExecutionNode root) {
+    private ExecutionGraphBuilder(final String name, final ExecutionNode root) {
 
-      Verify.verify(StringUtils.isNoneEmpty(name), "id cannot be null or empty");
+      Verify.verify(StringUtils.isNoneEmpty(name), "Name cannot be null or empty");
       Verify.verifyNotNull(root, "Root node cannot be null");
 
       this.name = name;
       this.root = root;
-      currentNode = this.root;
-      endNodes = new HashSet<>();
+      endNodes = new HashMap<>();
+      endNodes.put(root.getId(), root);
     }
 
-    public ExecutionBuilder then(final ExecutionNode node) {
+    public static ExecutionGraphBuilder BUILD(final String name,
+        final ExecutionNode.ExecutionNodeBuilder root) {
+      return new ExecutionGraphBuilder(name, root.build());
+    }
 
-      Verify.verifyNotNull(node, "Next step should not be null");
-      currentNode.addChildNode(node);
-      currentNode = node;
-      endNodes.remove(currentNode);
-      endNodes.add(node);
+    public ExecutionGraphBuilder then(final ExecutionNode.ExecutionNodeBuilder nodeBuilder) {
+
+      final ExecutionNode currentEndNode = getSingleEndNode();
+      final ExecutionNode node = nodeBuilder.build();
+      currentEndNode.addChildNode(node);
+      endNodes.clear();
+      endNodes.put(node.getId(), node);
       return this;
     }
 
-    /**
-     * If any of the execution Graph is null, it will be filtered out.
-     * @param executionGraphs
-     * @return
-     */
-    public ExecutionBuilder fork(final ExecutionGraph... executionGraphs) {
+    public ExecutionGraphBuilder then(final ExecutionGraphBuilder executionGraphBuilder) {
 
-      Arrays.stream(executionGraphs).filter(Objects::nonNull).forEach(
-          executionGraph -> {
-            currentNode.addChildNode(executionGraph.getRoot());
-            endNodes.remove(currentNode);
-            endNodes.addAll(executionGraph.getEndNodes());
+      final ExecutionNode currentEndNode = getSingleEndNode();
+      final ExecutionNode node = executionGraphBuilder.root;
+      currentEndNode.addChildNode(node);
+      endNodes.clear();
+      endNodes.putAll(executionGraphBuilder.endNodes);
+      return this;
+    }
+
+    public ExecutionGraphBuilder then(final ExecutionNode.ExecutionNodeBuilder nodeBuilder,
+        final Set<String> endNodeIds) {
+
+      final ExecutionNode node = nodeBuilder.build();
+      endNodeIds.forEach(endNodeId -> {
+        final ExecutionNode currentEndNode = endNodes.get(endNodeId);
+        currentEndNode.addChildNode(node);
+        endNodes.remove(endNodeId);
+      });
+      endNodes.put(node.getId(), node);
+      return this;
+    }
+
+    public ExecutionGraphBuilder fork(final ExecutionNode.ExecutionNodeBuilder... nodeBuilders) {
+      final ExecutionNode currentEndNode = getSingleEndNode();
+      Arrays.stream(nodeBuilders).map(nodeBuilder -> nodeBuilder.build())
+          .forEach(executionNode -> {
+            currentEndNode.addChildNode(executionNode);
+            endNodes.put(executionNode.getId(), executionNode);
           });
+      endNodes.remove(currentEndNode.getId());
       return this;
     }
 
-    public ExecutionBuilder join(final ExecutionNode executionNode) {
+    public ExecutionGraphBuilder fork(final ExecutionGraphBuilder... executionGraphBuilder) {
 
-      Verify.verifyNotNull(executionNode, "New Node cannot be null");
-      endNodes.forEach(executionNode1 -> executionNode1.addChildNode(executionNode1));
-      endNodes.clear();
-      endNodes.add(executionNode);
+      final ExecutionNode currentEndNode = getSingleEndNode();
+
+      Arrays.stream(executionGraphBuilder).forEach(executionGraphBuilder1 -> {
+        currentEndNode.addChildNode(executionGraphBuilder1.root);
+        endNodes.putAll(executionGraphBuilder1.endNodes);
+      });
+      endNodes.remove(currentEndNode.getId());
       return this;
     }
 
-    public ExecutionBuilder join(final ExecutionGraph executionGraph) {
+    public ExecutionGraphBuilder fork(final String endNodeId,
+        final ExecutionNode.ExecutionNodeBuilder... nodeBuilders) {
+      final ExecutionNode currentEndNode = endNodes.get(endNodeId);
+      Arrays.stream(nodeBuilders).map(nodeBuilder -> nodeBuilder.build())
+          .forEach(executionNode -> {
+            currentEndNode.addChildNode(executionNode);
+            endNodes.put(executionNode.getId(), executionNode);
+          });
+      endNodes.remove(currentEndNode.getId());
+      return this;
+    }
 
-      Verify.verifyNotNull(executionGraph, "New Graph cannot be null");
-      endNodes.forEach(executionNode -> executionNode.addChildNode(executionGraph.getRoot()));
+    public ExecutionGraphBuilder fork(final String endNodeId,
+        final ExecutionGraphBuilder... executionGraphBuilder) {
+
+      final ExecutionNode currentEndNode = endNodes.get(endNodeId);
+
+      Arrays.stream(executionGraphBuilder).forEach(executionGraphBuilder1 -> {
+        currentEndNode.addChildNode(executionGraphBuilder1.root);
+        endNodes.putAll(executionGraphBuilder1.endNodes);
+      });
+      endNodes.remove(currentEndNode.getId());
+      return this;
+    }
+
+    public ExecutionGraphBuilder join(final ExecutionNode.ExecutionNodeBuilder nodeBuilder) {
+      Verify.verify(endNodes.size() > 1, "Only single end node present");
+      final ExecutionNode node = nodeBuilder.build();
+      endNodes.values().forEach(executionNode -> executionNode.addChildNode(node));
       endNodes.clear();
-      endNodes.addAll(executionGraph.getEndNodes());
+      endNodes.put(node.getId(), node);
+      return this;
+    }
+
+    public ExecutionGraphBuilder join(final ExecutionNode.ExecutionNodeBuilder nodeBuilder,
+        final Set<String> endNodeIds) {
+      Verify.verify(endNodes.size() > 1, "Only single end node present");
+      final ExecutionNode node = nodeBuilder.build();
+      endNodeIds.forEach(new Consumer<String>() {
+        @Override
+        public void accept(final String nodeId) {
+          endNodes.get(nodeId).addChildNode(node);
+          endNodes.remove(nodeId);
+        }
+      });
+      endNodes.put(node.getId(), node);
       return this;
     }
 
     public ExecutionGraph build() {
 
       validate();
-      return new ExecutionGraph(name, root, endNodes);
+      return new ExecutionGraph(name, root, endNodes.values().stream().collect(Collectors.toSet()));
     }
 
     /**
@@ -115,6 +185,12 @@ public class ExecutionGraph {
      */
     private void validate() {
 
+    }
+
+    private ExecutionNode getSingleEndNode() {
+      Verify.verify(endNodes.size() == 1,
+          "Have multiple end nodes");
+      return endNodes.values().stream().findAny().get();
     }
 
   }

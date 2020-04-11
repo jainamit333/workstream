@@ -43,6 +43,10 @@ public class ExecutionNode<I, O extends StepResponse, R extends StepRequestBuild
     retryCount = DEFAULT_RETRY_COUNT;
   }
 
+  public String getId() {
+    return id;
+  }
+
   // TODO: 28/03/20 how to make sure it is called only by the Graph.
   void addChildNode(final ExecutionNode child) {
     childNodes.add(child);
@@ -56,11 +60,16 @@ public class ExecutionNode<I, O extends StepResponse, R extends StepRequestBuild
     private final Class<T> stepCazz;
     private Integer retryCount;
 
-    public ExecutionNodeBuilder(final String id, final Class<T> stepClazz) {
+    private ExecutionNodeBuilder(final String id, final Class<T> stepClazz) {
 
       Verify.verifyNotNull(stepClazz, "Step Clazz cannot be null");
       this.id = StringUtils.isEmpty(id) ? UUID.randomUUID().toString() : id;
       stepCazz = stepClazz;
+    }
+
+    public static ExecutionNodeBuilder BUILD(final String id,
+        final Class<? extends IStep> stepClazz) {
+      return new ExecutionNodeBuilder(id, stepClazz);
     }
 
     public ExecutionNodeBuilder<I, O, R, T> retry(final int retryCount) {

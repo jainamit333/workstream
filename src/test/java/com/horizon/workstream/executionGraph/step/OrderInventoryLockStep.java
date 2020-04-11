@@ -2,12 +2,12 @@ package com.horizon.workstream.executionGraph.step;
 
 import com.horizon.workstream.elements.step.IStep;
 import com.horizon.workstream.executionGraph.step.model.OrderInventorConfirmation;
-import com.horizon.workstream.executionGraph.step.stepBuilder.OrderProcessSupplierStepRequestBuilder;
+import com.horizon.workstream.executionGraph.step.stepBuilder.OrderProcessVoidStepRequestBuilder;
 import java.util.Optional;
 import java.util.logging.Logger;
 
 public class OrderInventoryLockStep implements
-    IStep<Void, OrderInventorConfirmation, OrderProcessSupplierStepRequestBuilder> {
+    IStep<Void, OrderInventorConfirmation, OrderProcessVoidStepRequestBuilder> {
 
   private static final String NAME = "Order-Inventor-Confirmation";
   private static final Logger LOGGER = Logger.getLogger(OrderInventoryLockStep.NAME);
@@ -33,7 +33,7 @@ public class OrderInventoryLockStep implements
   }
 
   @Override
-  public OrderProcessSupplierStepRequestBuilder getRequestBuilder() {
-    return OrderProcessSupplierStepRequestBuilder.INSTANCE;
+  public OrderProcessVoidStepRequestBuilder getRequestBuilder() {
+    return OrderProcessVoidStepRequestBuilder.INSTANCE;
   }
 }
